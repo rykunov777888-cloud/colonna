@@ -7,14 +7,22 @@ import type {
   CraneCapacity,
   RoofType,
   SpanCount,
+  TerrainType,
 } from "./calc/types";
-import type { TerrainType } from "./calc/types";
 import {
   searchSettlements,
   getSettlementClimateById,
 } from "./types/climate";
 import structuresJson from "./data/structures/structures.json";
 import cranesJson from "./data/cranes/cranes.json";
+
+const COLUMN_TYPES: ColumnType[] = ["edge", "fachwerk", "middle"];
+const COLUMN_LABELS: Record<ColumnType, string> = {
+  edge: "Крайняя",
+  fachwerk: "Фахверковая",
+  middle: "Средняя",
+};
+type Results = Record<ColumnType, CalculationOutput>;
 
 interface StructureRow {
   id: string;
@@ -92,7 +100,8 @@ const DEFAULT_INPUT: CalculationInput = {
 
 export function App() {
   const [input, setInput] = useState<CalculationInput>(DEFAULT_INPUT);
-  const [result, setResult] = useState<CalculationOutput | null>(null);
+  const [results, setResults] = useState<Results | null>(null);
+  const [activeTab, setActiveTab] = useState<ColumnType>("edge");
   const [error, setError] = useState<string | null>(null);
   const [cityQuery, setCityQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
@@ -121,10 +130,13 @@ export function App() {
   const handleCalc = () => {
     setError(null);
     try {
-      const r = runCalculation(input);
-      setResult(r);
+      const out: Partial<Results> = {};
+      for (const ct of COLUMN_TYPES) {
+        out[ct] = runCalculation({ ...input, columnType: ct });
+      }
+      setResults(out as Results);
     } catch (e) {
-      setResult(null);
+      setResults(null);
       setError(e instanceof Error ? e.message : String(e));
     }
   };
@@ -175,7 +187,11 @@ export function App() {
       suspendedCrane: { ...p.suspendedCrane, ...patch },
     }));
 
-  const muAuto = computeMu(input);
+  const muByType: Record<ColumnType, number> = {
+    edge: computeMu({ ...input, columnType: "edge" }),
+    fachwerk: computeMu({ ...input, columnType: "fachwerk" }),
+    middle: computeMu({ ...input, columnType: "middle" }),
+  };
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 1400, margin: "0 auto", padding: 16 }}>
@@ -286,21 +302,15 @@ export function App() {
         {/* Column 3: column & economy */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
           <legend style={{ fontWeight: 600 }}>Колонна и экономика</legend>
-          <SelectField
-            label="Тип колонны"
-            value={input.columnType}
-            options={[
-              ["fachwerk", "Фахверковая"],
-              ["edge", "Крайняя"],
-              ["middle", "Средняя"],
-            ]}
-            onChange={(v) => upd({ columnType: v as ColumnType })}
-          />
-          <ReadOnlyField
-            label="μ (к-т расч. длины, авто)"
-            value={muAuto.toFixed(2)}
-            hint="Считается по типу колонны / связям / кол-ву пролётов"
-          />
+          <div style={{ marginBottom: 6, fontSize: 12, color: "#475569" }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>μ по типу колонны (авто):</div>
+            <div>Крайняя: <b>{muByType.edge.toFixed(2)}</b></div>
+            <div>Фахверковая: <b>{muByType.fachwerk.toFixed(2)}</b></div>
+            <div>Средняя: <b>{muByType.middle.toFixed(2)}</b></div>
+            <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+              Считается по связям / кол-ву пролётов
+            </div>
+          </div>
           <Field label="Надбавка, %" value={input.loadAddition_pct} onChange={(v) => upd({ loadAddition_pct: v })} />
           <hr style={{ margin: "8px 0" }} />
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Цены стали, руб/кг</div>
@@ -413,8 +423,45 @@ export function App() {
 
       {error && <div style={{ color: "red", marginBottom: 12 }}>{error}</div>}
 
-      {result && (
+      {results && (() => {
+        const result = results[activeTab];
+        return (
         <>
+          <div style={{ display: "flex", gap: 4, marginBottom: 12, borderBottom: "2px solid #cbd5e1" }}>
+            {COLUMN_TYPES.map((ct) => {
+              const isActive = activeTab === ct;
+              const r = results[ct];
+              const top = r.results[0];
+              return (
+                <button
+                  key={ct}
+                  onClick={() => setActiveTab(ct)}
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: 14,
+                    fontWeight: isActive ? 600 : 400,
+                    background: isActive ? "#2563eb" : "#f1f5f9",
+                    color: isActive ? "#fff" : "#334155",
+                    border: "none",
+                    borderTopLeftRadius: 6,
+                    borderTopRightRadius: 6,
+                    cursor: "pointer",
+                    minWidth: 200,
+                    textAlign: "left",
+                  }}
+                >
+                  <div>{COLUMN_LABELS[ct]}</div>
+                  <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.85, marginTop: 2 }}>
+                    N={r.N_kN.toFixed(1)} кН · M={r.M_kNm.toFixed(1)} кН·м
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.85 }}>
+                    {top ? `топ: ${top.profileName} / ${top.steel} / ${top.struts} расп. (${top.maxUtilization.toFixed(2)})` : "нет подходящих"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
           <div style={{ display: "flex", gap: 24, marginBottom: 12, flexWrap: "wrap" }}>
             <Stat label="N (осевая)" value={`${result.N_kN.toFixed(1)} кН`} />
             <Stat label="M (момент)" value={`${result.M_kNm.toFixed(1)} кН·м`} />
@@ -427,7 +474,7 @@ export function App() {
           </div>
 
           <h2 style={{ fontSize: 16 }}>
-            Подходящие профили ({result.results.length} из 2080 вариантов)
+            {COLUMN_LABELS[activeTab]} — подходящие профили ({result.results.length} из 2080 вариантов)
           </h2>
           <div style={{ overflowX: "auto" }}>
             <table
@@ -500,7 +547,8 @@ export function App() {
             </table>
           </div>
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }
