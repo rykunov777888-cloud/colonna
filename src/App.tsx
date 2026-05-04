@@ -98,7 +98,7 @@ const DEFAULT_INPUT: CalculationInput = {
   },
 };
 
-export function App() {
+export function ColumnApp() {
   const [input, setInput] = useState<CalculationInput>(DEFAULT_INPUT);
   const [results, setResults] = useState<Results | null>(null);
   const [activeTab, setActiveTab] = useState<ColumnType>("edge");
@@ -194,7 +194,7 @@ export function App() {
   };
 
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 1400, margin: "0 auto", padding: 16 }}>
+    <div>
       <h1 style={{ fontSize: 22, marginBottom: 4 }}>
         Калькулятор стальных колонн промышленных зданий
       </h1>
@@ -669,6 +669,45 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div>
       <div style={{ fontSize: 11, color: "#888" }}>{label}</div>
       <div style={{ fontSize: 16, fontWeight: 600 }}>{value}</div>
+    </div>
+  );
+}
+
+import { TrussApp } from "./TrussApp";
+
+type Mode = "column" | "truss";
+
+export function App() {
+  const [mode, setMode] = useState<Mode>("column");
+  return (
+    <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 1400, margin: "0 auto", padding: 16 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, borderBottom: "2px solid #e2e8f0" }}>
+        {(["column", "truss"] as const).map((m) => {
+          const label = m === "column" ? "Колонна" : "Ферма";
+          const isActive = mode === m;
+          return (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              style={{
+                padding: "10px 24px",
+                fontSize: 15,
+                fontWeight: 600,
+                background: isActive ? "#0369a1" : "transparent",
+                color: isActive ? "white" : "#475569",
+                border: "none",
+                borderRadius: "6px 6px 0 0",
+                cursor: "pointer",
+                marginBottom: -2,
+                borderBottom: isActive ? "2px solid #0369a1" : "2px solid transparent",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      {mode === "column" ? <ColumnApp /> : <TrussApp />}
     </div>
   );
 }
