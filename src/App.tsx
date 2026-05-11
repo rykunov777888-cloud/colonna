@@ -676,8 +676,10 @@ function Stat({ label, value }: { label: string; value: string }) {
 import { TrussApp } from "./TrussApp";
 import { PurlinApp } from "./PurlinApp";
 import { BeamCellApp } from "./BeamCellApp";
+import { WindowRiegelApp } from "./WindowRiegelApp";
+import { CraneBeamApp } from "./CraneBeamApp";
 
-type Mode = "column" | "truss" | "purlins" | "beamCell";
+type Mode = "column" | "truss" | "purlins" | "beamCell" | "windowRiegel" | "craneBeam";
 
 export function App() {
   const [mode, setMode] = useState<Mode>("column");
@@ -688,11 +690,15 @@ export function App() {
       ? "Ферма"
       : m === "purlins"
       ? "Прогоны"
-      : "Балочная клетка";
+      : m === "beamCell"
+      ? "Балочная клетка"
+      : m === "windowRiegel"
+      ? "Оконные ригели"
+      : "Подкрановая балка";
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 1400, margin: "0 auto", padding: 16 }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, borderBottom: "2px solid #e2e8f0" }}>
-        {(["column", "truss", "purlins", "beamCell"] as const).map((m) => {
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, borderBottom: "2px solid #e2e8f0", flexWrap: "wrap" }}>
+        {(["column", "truss", "purlins", "beamCell", "windowRiegel", "craneBeam"] as const).map((m) => {
           const isActive = mode === m;
           return (
             <button
@@ -720,6 +726,8 @@ export function App() {
       {mode === "truss" && <TrussApp />}
       {mode === "purlins" && <PurlinApp />}
       {mode === "beamCell" && <BeamCellApp />}
+      {mode === "windowRiegel" && <WindowRiegelApp />}
+      {mode === "craneBeam" && <CraneBeamApp />}
     </div>
   );
 }
