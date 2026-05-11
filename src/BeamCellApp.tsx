@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { calculate, defaultInputs } from "./calc/beamCell/engine";
+import { useBuilding, type Building } from "./building/context";
+import { SyncedNumField } from "./building/SyncedField";
 import type {
   CalculatorInputs,
   MemberSolution,
@@ -29,11 +31,27 @@ function solutionText(s: MemberSolution): string {
 }
 
 export function BeamCellApp() {
+  const { building, setBuilding } = useBuilding();
   // Lock to "балка покрытия" mode — only ГБ is calculated
-  const [inputs, setInputs] = useState<CalculatorInputs>({
+  const [inputs, setInputs] = useState<CalculatorInputs>(() => ({
     ...defaultInputs,
     floorType: "балка покрытия",
-  });
+    mainBeamSpan: building.span_m,
+    mainBeamStep: building.framePitch_m,
+  }));
+
+  useEffect(() => {
+    setInputs((cur) => ({
+      ...cur,
+      mainBeamSpan: building.span_m,
+      mainBeamStep: building.framePitch_m,
+    }));
+  }, [building.span_m, building.framePitch_m]);
+
+  const updSynced = <K extends keyof Building>(key: K, value: number) => {
+    setBuilding({ [key]: value } as Partial<Building>);
+  };
+
   const result = useMemo(() => calculate(inputs), [inputs]);
   const upd = <K extends keyof CalculatorInputs>(k: K, v: CalculatorInputs[K]) =>
     setInputs((cur) => ({ ...cur, [k]: v }));
@@ -54,8 +72,8 @@ export function BeamCellApp() {
           <legend style={{ fontWeight: 600 }}>Геометрия</legend>
           <NumField label="Вдоль ГБ, м" value={inputs.lengthAlongMain} step={0.5} onChange={(v) => upd("lengthAlongMain", v)} />
           <NumField label="Поперёк ГБ, м" value={inputs.widthAcrossMain} step={0.5} onChange={(v) => upd("widthAcrossMain", v)} />
-          <NumField label="Пролёт ГБ, м" value={inputs.mainBeamSpan} step={0.5} onChange={(v) => upd("mainBeamSpan", v)} />
-          <NumField label="Шаг ГБ, м" value={inputs.mainBeamStep} step={0.5} onChange={(v) => upd("mainBeamStep", v)} />
+          <SyncedNumField label="Пролёт ГБ (= пролёт здания), м" value={inputs.mainBeamSpan} step={0.5} onChange={(v) => updSynced("span_m", v)} />
+          <SyncedNumField label="Шаг ГБ (= шаг рам), м" value={inputs.mainBeamStep} step={0.5} onChange={(v) => updSynced("framePitch_m", v)} />
         </fieldset>
 
         {/* Column 2: Loads */}

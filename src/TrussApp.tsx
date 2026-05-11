@@ -1,5 +1,7 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { runTrussCalculation, getDefaultMinThickness } from "./calc/truss/engine";
+import { useBuilding, type Building } from "./building/context";
+import { SyncedNumField } from "./building/SyncedField";
 import {
   TRUSS_SECTIONS,
   TRUSS_SECTION_LABELS,
@@ -43,12 +45,39 @@ const DEFAULT_INPUT: TrussInput = {
 };
 
 export function TrussApp() {
-  const [input, setInput] = useState<TrussInput>(DEFAULT_INPUT);
+  const { building, setBuilding } = useBuilding();
+  const [input, setInput] = useState<TrussInput>(() => ({
+    ...DEFAULT_INPUT,
+    span_m: building.span_m,
+    length_m: building.length_m,
+    height_m: building.height_m,
+    roofSlope_deg: building.roofSlope_deg,
+    framePitch_m: building.framePitch_m,
+    w0_kPa: building.w0_kPa,
+    Sg_kPa: building.Sg_kPa,
+  }));
   const [out, setOut] = useState<TrussOutput | null>(null);
   const [activeSection, setActiveSection] = useState<TrussSection>("VP");
   const [error, setError] = useState<string | null>(null);
   const [cityQuery, setCityQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
+
+  useEffect(() => {
+    setInput((cur) => ({
+      ...cur,
+      span_m: building.span_m,
+      length_m: building.length_m,
+      height_m: building.height_m,
+      roofSlope_deg: building.roofSlope_deg,
+      framePitch_m: building.framePitch_m,
+      w0_kPa: building.w0_kPa,
+      Sg_kPa: building.Sg_kPa,
+    }));
+  }, [building]);
+
+  const updSynced = <K extends keyof Building>(key: K, value: number) => {
+    setBuilding({ [key]: value } as Partial<Building>);
+  };
 
   const cityMatches = useMemo(() => {
     if (cityQuery.length < 2) return [];
@@ -62,11 +91,13 @@ export function TrussApp() {
     setCityQuery("");
     setInput((prev) => ({
       ...prev,
-      w0_kPa: s.wind.w0Kpa ?? prev.w0_kPa,
-      Sg_kPa: s.snow.sgKpa ?? prev.Sg_kPa,
       terrainType: s.terrain.defaultType ?? prev.terrainType,
     }));
-  }, []);
+    const patch: Partial<Building> = {};
+    if (typeof s.wind.w0Kpa === "number") patch.w0_kPa = s.wind.w0Kpa;
+    if (typeof s.snow.sgKpa === "number") patch.Sg_kPa = s.snow.sgKpa;
+    if (Object.keys(patch).length > 0) setBuilding(patch);
+  }, [setBuilding]);
 
   const handleCalc = () => {
     setError(null);
@@ -105,11 +136,11 @@ export function TrussApp() {
         {/* Column 1: geometry */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
           <legend style={{ fontWeight: 600 }}>Геометрия фермы</legend>
-          <Field label="Пролёт, м (18–30)" value={input.span_m} onChange={(v) => upd({ span_m: v })} />
-          <Field label="Длина здания, м" value={input.length_m} onChange={(v) => upd({ length_m: v })} />
-          <Field label="Высота до низа фермы, м" value={input.height_m} onChange={(v) => upd({ height_m: v })} />
-          <Field label="Уклон кровли, °" value={input.roofSlope_deg} onChange={(v) => upd({ roofSlope_deg: v })} />
-          <Field label="Шаг рам, м" value={input.framePitch_m} onChange={(v) => upd({ framePitch_m: v })} />
+          <SyncedNumField label="Пролёт, м (18–30)" value={input.span_m} onChange={(v) => updSynced("span_m", v)} />
+          <SyncedNumField label="Длина здания, м" value={input.length_m} onChange={(v) => updSynced("length_m", v)} />
+          <SyncedNumField label="Высота до низа фермы, м" value={input.height_m} onChange={(v) => updSynced("height_m", v)} />
+          <SyncedNumField label="Уклон кровли, °" value={input.roofSlope_deg} onChange={(v) => updSynced("roofSlope_deg", v)} />
+          <SyncedNumField label="Шаг рам, м" value={input.framePitch_m} onChange={(v) => updSynced("framePitch_m", v)} />
           <Field
             label="Шаг прогонов, мм (0 = без прогонов)"
             value={input.purlinPitch_mm}
@@ -165,8 +196,8 @@ export function TrussApp() {
             ]}
             onChange={(v) => upd({ terrainType: v as TerrainType })}
           />
-          <Field label="w₀ (ветер), кПа" value={input.w0_kPa} onChange={(v) => upd({ w0_kPa: v })} step={0.01} />
-          <Field label="Sg (снег), кПа" value={input.Sg_kPa} onChange={(v) => upd({ Sg_kPa: v })} step={0.01} />
+          <SyncedNumField label="w₀ (ветер), кПа" value={input.w0_kPa} onChange={(v) => updSynced("w0_kPa", v)} step={0.01} />
+          <SyncedNumField label="Sg (снег), кПа" value={input.Sg_kPa} onChange={(v) => updSynced("Sg_kPa", v)} step={0.01} />
           <SelectField
             label="Конструкция покрытия"
             value={input.roofStructure}

@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useBuilding, type Building } from "./building/context";
+import { SyncedNumField } from "./building/SyncedField";
 import {
   calculateWindowRiegel,
   defaultWindowRiegelInputs,
@@ -29,7 +31,31 @@ const WINDOW_TYPE_LABELS: Record<number, string> = {
 };
 
 export function WindowRiegelApp() {
-  const [inputs, setInputs] = useState<WindowRiegelInputs>(defaultWindowRiegelInputs);
+  const { building, setBuilding } = useBuilding();
+  const [inputs, setInputs] = useState<WindowRiegelInputs>(() => ({
+    ...defaultWindowRiegelInputs,
+    buildingSpanM: building.span_m,
+    buildingLengthM: building.length_m,
+    buildingHeightM: building.height_m,
+    frameStepM: building.framePitch_m,
+    windLoadKpa: building.w0_kPa,
+  }));
+
+  useEffect(() => {
+    setInputs((cur) => ({
+      ...cur,
+      buildingSpanM: building.span_m,
+      buildingLengthM: building.length_m,
+      buildingHeightM: building.height_m,
+      frameStepM: building.framePitch_m,
+      windLoadKpa: building.w0_kPa,
+    }));
+  }, [building]);
+
+  const updSynced = <K extends keyof Building>(key: K, value: number) => {
+    setBuilding({ [key]: value } as Partial<Building>);
+  };
+
   const result = useMemo(() => {
     try {
       return calculateWindowRiegel(inputs);
@@ -43,11 +69,10 @@ export function WindowRiegelApp() {
 
   const setCity = (city: string) => {
     const climate = findClimateSettlement(city);
-    setInputs((cur) => ({
-      ...cur,
-      city,
-      windLoadKpa: typeof climate?.w0Kpa === "number" ? climate.w0Kpa : cur.windLoadKpa,
-    }));
+    setInputs((cur) => ({ ...cur, city }));
+    if (typeof climate?.w0Kpa === "number") {
+      setBuilding({ w0_kPa: climate.w0Kpa });
+    }
   };
 
   return (
@@ -74,16 +99,16 @@ export function WindowRiegelApp() {
             </datalist>
           </div>
           <NumField label="Высота окна, м" value={inputs.windowHeightM} step={0.1} onChange={(v) => upd("windowHeightM", v)} />
-          <NumField label="Шаг рам, м" value={inputs.frameStepM} step={0.5} onChange={(v) => upd("frameStepM", v)} />
+          <SyncedNumField label="Шаг рам, м" value={inputs.frameStepM} step={0.5} onChange={(v) => updSynced("framePitch_m", v)} />
           <SelField
             label="Тип окна"
             value={String(inputs.windowType)}
             options={windowRiegelOptions.windowTypes.map((t) => [String(t), WINDOW_TYPE_LABELS[t] ?? `Тип ${t}`])}
             onChange={(v) => upd("windowType", Number(v))}
           />
-          <NumField label="Высота здания, м" value={inputs.buildingHeightM} step={0.5} onChange={(v) => upd("buildingHeightM", v)} />
-          <NumField label="Пролёт здания, м" value={inputs.buildingSpanM} step={1} onChange={(v) => upd("buildingSpanM", v)} />
-          <NumField label="Длина здания, м" value={inputs.buildingLengthM} step={1} onChange={(v) => upd("buildingLengthM", v)} />
+          <SyncedNumField label="Высота здания, м" value={inputs.buildingHeightM} step={0.5} onChange={(v) => updSynced("height_m", v)} />
+          <SyncedNumField label="Пролёт здания, м" value={inputs.buildingSpanM} step={1} onChange={(v) => updSynced("span_m", v)} />
+          <SyncedNumField label="Длина здания, м" value={inputs.buildingLengthM} step={1} onChange={(v) => updSynced("length_m", v)} />
         </fieldset>
 
         {/* Column 2: Wind & loads */}
@@ -95,7 +120,7 @@ export function WindowRiegelApp() {
             options={windowRiegelOptions.terrainTypes.map((t) => [String(t), String(t)])}
             onChange={(v) => upd("terrainType", v)}
           />
-          <NumField label="Ветровая нагрузка w₀, кПа" value={inputs.windLoadKpa} step={0.01} onChange={(v) => upd("windLoadKpa", v)} />
+          <SyncedNumField label="Ветровая нагрузка w₀, кПа" value={inputs.windLoadKpa} step={0.01} onChange={(v) => updSynced("w0_kPa", v)} />
           <SelField
             label="Уровень ответственности"
             value={String(inputs.responsibilityLevel)}

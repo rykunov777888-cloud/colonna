@@ -1,5 +1,7 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { runCalculation, computeMu } from "./calc/engine";
+import { useBuilding, type Building } from "./building/context";
+import { SyncedNumField } from "./building/SyncedField";
 import type {
   CalculationInput,
   CalculationOutput,
@@ -99,12 +101,40 @@ const DEFAULT_INPUT: CalculationInput = {
 };
 
 export function ColumnApp() {
-  const [input, setInput] = useState<CalculationInput>(DEFAULT_INPUT);
+  const { building, setBuilding } = useBuilding();
+  const [input, setInput] = useState<CalculationInput>(() => ({
+    ...DEFAULT_INPUT,
+    span_m: building.span_m,
+    length_m: building.length_m,
+    height_m: building.height_m,
+    roofSlope_deg: building.roofSlope_deg,
+    framePitch_m: building.framePitch_m,
+    w0_kPa: building.w0_kPa,
+    Sg_kPa: building.Sg_kPa,
+  }));
   const [results, setResults] = useState<Results | null>(null);
   const [activeTab, setActiveTab] = useState<ColumnType>("edge");
   const [error, setError] = useState<string | null>(null);
   const [cityQuery, setCityQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
+
+  // Pull updates from BuildingContext when other tabs change shared fields.
+  useEffect(() => {
+    setInput((cur) => ({
+      ...cur,
+      span_m: building.span_m,
+      length_m: building.length_m,
+      height_m: building.height_m,
+      roofSlope_deg: building.roofSlope_deg,
+      framePitch_m: building.framePitch_m,
+      w0_kPa: building.w0_kPa,
+      Sg_kPa: building.Sg_kPa,
+    }));
+  }, [building]);
+
+  const updSynced = <K extends keyof Building>(key: K, value: number) => {
+    setBuilding({ [key]: value } as Partial<Building>);
+  };
 
   const cityMatches = useMemo(() => {
     if (cityQuery.length < 2) return [];
@@ -119,12 +149,14 @@ export function ColumnApp() {
       setCityQuery("");
       setInput((prev) => ({
         ...prev,
-        w0_kPa: s.wind.w0Kpa ?? prev.w0_kPa,
-        Sg_kPa: s.snow.sgKpa ?? prev.Sg_kPa,
         terrainType: s.terrain.defaultType ?? prev.terrainType,
       }));
+      const patch: Partial<Building> = {};
+      if (typeof s.wind.w0Kpa === "number") patch.w0_kPa = s.wind.w0Kpa;
+      if (typeof s.snow.sgKpa === "number") patch.Sg_kPa = s.snow.sgKpa;
+      if (Object.keys(patch).length > 0) setBuilding(patch);
     },
-    [],
+    [setBuilding],
   );
 
   const handleCalc = () => {
@@ -206,11 +238,11 @@ export function ColumnApp() {
         {/* Column 1: building geometry */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
           <legend style={{ fontWeight: 600 }}>Геометрия здания</legend>
-          <Field label="Пролёт, м" value={input.span_m} onChange={(v) => upd({ span_m: v })} />
-          <Field label="Длина, м" value={input.length_m} onChange={(v) => upd({ length_m: v })} />
-          <Field label="Высота, м" value={input.height_m} onChange={(v) => upd({ height_m: v })} />
-          <Field label="Уклон кровли, °" value={input.roofSlope_deg} onChange={(v) => upd({ roofSlope_deg: v })} />
-          <Field label="Шаг рам, м" value={input.framePitch_m} onChange={(v) => upd({ framePitch_m: v })} />
+          <SyncedNumField label="Пролёт, м" value={input.span_m} onChange={(v) => updSynced("span_m", v)} />
+          <SyncedNumField label="Длина, м" value={input.length_m} onChange={(v) => updSynced("length_m", v)} />
+          <SyncedNumField label="Высота, м" value={input.height_m} onChange={(v) => updSynced("height_m", v)} />
+          <SyncedNumField label="Уклон кровли, °" value={input.roofSlope_deg} onChange={(v) => updSynced("roofSlope_deg", v)} />
+          <SyncedNumField label="Шаг рам, м" value={input.framePitch_m} onChange={(v) => updSynced("framePitch_m", v)} />
           <Field label="Шаг стоек фахверка, м" value={input.fachverkPitch_m} onChange={(v) => upd({ fachverkPitch_m: v })} />
           <SelectField
             label="Кол-во пролётов"
@@ -280,8 +312,8 @@ export function ColumnApp() {
             ]}
             onChange={(v) => upd({ terrainType: v as TerrainType })}
           />
-          <Field label="w₀ (ветер), кПа" value={input.w0_kPa} onChange={(v) => upd({ w0_kPa: v })} step={0.01} />
-          <Field label="Sg (снег), кПа" value={input.Sg_kPa} onChange={(v) => upd({ Sg_kPa: v })} step={0.01} />
+          <SyncedNumField label="w₀ (ветер), кПа" value={input.w0_kPa} onChange={(v) => updSynced("w0_kPa", v)} step={0.01} />
+          <SyncedNumField label="Sg (снег), кПа" value={input.Sg_kPa} onChange={(v) => updSynced("Sg_kPa", v)} step={0.01} />
           <SelectField
             label="Конструкция покрытия"
             value={input.roofStructure}
@@ -722,12 +754,44 @@ export function App() {
           );
         })}
       </div>
+      <BuildingSummaryBanner />
       {mode === "column" && <ColumnApp />}
       {mode === "truss" && <TrussApp />}
       {mode === "purlins" && <PurlinApp />}
       {mode === "beamCell" && <BeamCellApp />}
       {mode === "windowRiegel" && <WindowRiegelApp />}
       {mode === "craneBeam" && <CraneBeamApp />}
+    </div>
+  );
+}
+
+function BuildingSummaryBanner() {
+  const { building } = useBuilding();
+  return (
+    <div
+      title="Эти параметры синхронизированы между всеми вкладками. Жёлтые поля внутри вкладок изменяют их сразу везде."
+      style={{
+        marginBottom: 12,
+        padding: "8px 12px",
+        background: "#fef9c3",
+        border: "1px dashed #eab308",
+        borderRadius: 6,
+        fontSize: 12,
+        color: "#78350f",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 16,
+        alignItems: "center",
+      }}
+    >
+      <span style={{ fontWeight: 600 }}>🔗 Здание (общее):</span>
+      <span>пролёт <b>{building.span_m}</b> м</span>
+      <span>длина <b>{building.length_m}</b> м</span>
+      <span>высота <b>{building.height_m}</b> м</span>
+      <span>уклон <b>{building.roofSlope_deg}°</b></span>
+      <span>шаг рам <b>{building.framePitch_m}</b> м</span>
+      <span>w₀ <b>{building.w0_kPa}</b> кПа</span>
+      <span>Sg <b>{building.Sg_kPa}</b> кПа</span>
     </div>
   );
 }
