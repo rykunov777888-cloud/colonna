@@ -76,30 +76,7 @@ export function PurlinApp() {
     gamma_n: building.responsibilityCoeff,
     cassetteHeightFilter_mm: getCassetteHeightFilter(building.roofStructure),
   }));
-  const [out, setOut] = useState<PurlinOutput | null>(null);
-  const [rolledTop10, setRolledTop10] = useState<RolledCandidate[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const { setResult } = useBuildingResults();
-
-  // Publish ЛСТК top-1 selection to shared results bus for the Summary tab.
-  useEffect(() => {
-    if (!out || out.top10.length === 0) {
-      setResult("purlin", null);
-      return;
-    }
-    const top = out.top10[0];
-    // Grade is determined by profile Ry (MP350 ≈ 350 МПа, MP390 ≈ 390 МПа).
-    const isMP390 = top.profile.Ry_MPa >= 380;
-    const steelLabel = isMP390 ? "МП390" : "МП350";
-    const pricePerKg = isMP390 ? building.priceMP390_rubKg : building.priceMP350_rubKg;
-    const item: ResultItem = {
-      profile: top.profile.name,
-      steel: steelLabel,
-      totalMass_kg: top.massPerBuilding_kg,
-      cost_rub: top.massPerBuilding_kg * pricePerKg,
-    };
-    setResult("purlin", item);
-  }, [out, building.priceMP350_rubKg, building.priceMP390_rubKg, setResult]);
   const [cityQuery, setCityQuery] = useState(building.city);
   const [showCityMatches, setShowCityMatches] = useState(false);
   const [maxUtilFixed, setMaxUtilFixed] = useState<boolean>(false);
@@ -157,28 +134,27 @@ export function PurlinApp() {
     setBuilding(patch);
   }, [setBuilding]);
 
-  const handleCalc = () => {
-    setError(null);
+  // Auto-recompute on every input/option change — no «Рассчитать» button needed.
+  const { out, rolledTop10, error } = useMemo<{
+    out: PurlinOutput | null;
+    rolledTop10: RolledCandidate[];
+    error: string | null;
+  }>(() => {
     try {
       const eff: PurlinInput = {
         ...input,
         maxUtilization: maxUtilFixed ? maxUtilValue : "default",
       };
       const r = runPurlinCalculation(eff);
-      setOut(r);
-
       // SLS load (II ПС) for deflection, per Excel F11+F13 = 0.5·1.1·Sg·cosα·γn + roofLoad/1.2·γn
       const cosA = Math.cos((eff.roofSlope_deg * Math.PI) / 180);
       const q_SLS_kPa =
         0.5 * 1.1 * eff.Sg_kPa * cosA * eff.gamma_n + (eff.roofLoad_kPa / 1.2) * eff.gamma_n;
-      // Axial wind on facade transferred to purlin (Excel D18) — placeholder; full computation
-      // requires facade wind formula. Default Excel scenario value ≈ 29.65 kN.
+      // Axial wind on facade transferred to purlin (Excel D18) — placeholder; default ≈ 29.65 kN.
       const N_axial_kN = 29.65;
-
       const rolled = selectRolledTop10(
         {
           ...eff,
-          // Force fixed step = 1500 mm (mirrors Excel default for rolled top-10)
           minStep_mm: 1500,
           maxStep_mm: 1500,
           N_axial_kN_externalOverride: N_axial_kN,
@@ -188,13 +164,30 @@ export function PurlinApp() {
         r.q_total_kPa,
         q_SLS_kPa,
       );
-      setRolledTop10(rolled);
+      return { out: r, rolledTop10: rolled, error: null };
     } catch (e) {
-      setOut(null);
-      setRolledTop10([]);
-      setError(e instanceof Error ? e.message : String(e));
+      return { out: null, rolledTop10: [], error: e instanceof Error ? e.message : String(e) };
     }
-  };
+  }, [input, maxUtilFixed, maxUtilValue, rolledMaxK, rolledPrices]);
+
+  // Publish ЛСТК top-1 selection to shared results bus for the Summary tab.
+  useEffect(() => {
+    if (!out || out.top10.length === 0) {
+      setResult("purlin", null);
+      return;
+    }
+    const top = out.top10[0];
+    const isMP390 = top.profile.Ry_MPa >= 380;
+    const steelLabel = isMP390 ? "МП390" : "МП350";
+    const pricePerKg = isMP390 ? building.priceMP390_rubKg : building.priceMP350_rubKg;
+    const item: ResultItem = {
+      profile: top.profile.name,
+      steel: steelLabel,
+      totalMass_kg: top.massPerBuilding_kg,
+      cost_rub: top.massPerBuilding_kg * pricePerKg,
+    };
+    setResult("purlin", item);
+  }, [out, building.priceMP350_rubKg, building.priceMP390_rubKg, setResult]);
 
   const upd = (patch: Partial<PurlinInput>) => setInput((p) => ({ ...p, ...patch }));
 
@@ -385,21 +378,6 @@ export function PurlinApp() {
       <div style={{ marginBottom: 16 }}>
         <PricesBlock />
       </div>
-
-      <button
-        onClick={handleCalc}
-        style={{
-          padding: "8px 18px",
-          fontSize: 15,
-          background: "#0c4a6e",
-          color: "white",
-          border: 0,
-          borderRadius: 6,
-          cursor: "pointer",
-        }}
-      >
-        Рассчитать
-      </button>
 
       {error && (
         <div style={{ marginTop: 12, color: "#b91c1c", fontSize: 14 }}>

@@ -126,12 +126,23 @@ export function ColumnApp() {
       "С345": building.priceC345_rubKg,
     },
   }));
-  const [results, setResults] = useState<Results | null>(null);
   const [activeTab, setActiveTab] = useState<ColumnType>("edge");
-  const [error, setError] = useState<string | null>(null);
   const [cityQuery, setCityQuery] = useState(building.city);
   const [showCityMatches, setShowCityMatches] = useState(false);
   const { setResult } = useBuildingResults();
+
+  // Auto-recompute results on every input change — no «Рассчитать» button needed.
+  const { results, error } = useMemo<{ results: Results | null; error: string | null }>(() => {
+    try {
+      const out: Partial<Results> = {};
+      for (const ct of COLUMN_TYPES) {
+        out[ct] = runCalculation({ ...input, columnType: ct });
+      }
+      return { results: out as Results, error: null };
+    } catch (e) {
+      return { results: null, error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [input]);
 
   // Publish current column selection into the shared results bus for the Summary tab.
   useEffect(() => {
@@ -229,20 +240,6 @@ export function ColumnApp() {
     },
     [setBuilding],
   );
-
-  const handleCalc = () => {
-    setError(null);
-    try {
-      const out: Partial<Results> = {};
-      for (const ct of COLUMN_TYPES) {
-        out[ct] = runCalculation({ ...input, columnType: ct });
-      }
-      setResults(out as Results);
-    } catch (e) {
-      setResults(null);
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
 
   const upd = (patch: Partial<CalculationInput>) =>
     setInput((p) => ({ ...p, ...patch }));
@@ -511,23 +508,6 @@ export function ColumnApp() {
 
       {/* Auto-propagation info banner */}
       <LoadPropagationBanner />
-
-      <button
-        onClick={handleCalc}
-        style={{
-          padding: "10px 32px",
-          fontSize: 16,
-          fontWeight: 600,
-          background: "#2563eb",
-          color: "#fff",
-          border: "none",
-          borderRadius: 6,
-          cursor: "pointer",
-          marginBottom: 16,
-        }}
-      >
-        Рассчитать
-      </button>
 
       {error && <div style={{ color: "red", marginBottom: 12 }}>{error}</div>}
 

@@ -28,6 +28,7 @@ export function CraneBeamApp() {
   const [result, setResult] = useState<CraneCalculationResult | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoRecalc, setAutoRecalc] = useState(false);
   const { setResult: publishResult } = useBuildingResults();
 
   // Publish selected crane-beam profile (per piece) into shared bus.
@@ -65,6 +66,17 @@ export function CraneBeamApp() {
       setCalculating(false);
     }
   };
+
+  // Auto-recompute when enabled — debounced 600 ms so rapid edits don't stack.
+  // HyperFormula takes ~3–10 s, hence opt-in.
+  useEffect(() => {
+    if (!autoRecalc) return;
+    const t = setTimeout(() => {
+      void handleCalc();
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputs, autoRecalc]);
 
   return (
     <div>
@@ -161,6 +173,25 @@ export function CraneBeamApp() {
           >
             {calculating ? "Расчёт..." : "Рассчитать"}
           </button>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginTop: 8,
+              fontSize: 12,
+              color: "#475569",
+              cursor: "pointer",
+            }}
+            title="Пересчитывать автоматически при каждом изменении (расчёт ~3–10 сек)"
+          >
+            <input
+              type="checkbox"
+              checked={autoRecalc}
+              onChange={(e) => setAutoRecalc(e.target.checked)}
+            />
+            Авто-пересчёт <span style={{ color: "#94a3b8" }}>(медленно)</span>
+          </label>
         </fieldset>
       </div>
 

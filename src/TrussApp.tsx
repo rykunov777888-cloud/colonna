@@ -63,12 +63,19 @@ export function TrussApp() {
     roofLoad_kPa: initialRoof?.kPa ?? DEFAULT_INPUT.roofLoad_kPa,
     responsibilityCoeff: building.responsibilityCoeff,
   }));
-  const [out, setOut] = useState<TrussOutput | null>(null);
   const [activeSection, setActiveSection] = useState<TrussSection>("VP");
-  const [error, setError] = useState<string | null>(null);
   const [cityQuery, setCityQuery] = useState(building.city);
   const [showCityMatches, setShowCityMatches] = useState(false);
   const { setResult } = useBuildingResults();
+
+  // Auto-recompute on every input change — no «Рассчитать» button needed.
+  const { out, error } = useMemo<{ out: TrussOutput | null; error: string | null }>(() => {
+    try {
+      return { out: runTrussCalculation(input), error: null };
+    } catch (e) {
+      return { out: null, error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [input]);
 
   // Publish truss selection into shared results bus for the Summary tab.
   useEffect(() => {
@@ -147,16 +154,7 @@ export function TrussApp() {
     setBuilding(patch);
   }, [setBuilding]);
 
-  const handleCalc = () => {
-    setError(null);
-    try {
-      const r = runTrussCalculation(input);
-      setOut(r);
-    } catch (e) {
-      setOut(null);
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
+
 
   const upd = (patch: Partial<TrussInput>) =>
     setInput((p) => ({ ...p, ...patch }));
@@ -322,22 +320,7 @@ export function TrussApp() {
         <PricesBlock />
       </div>
 
-      <button
-        onClick={handleCalc}
-        style={{
-          padding: "8px 16px",
-          fontSize: 15,
-          fontWeight: 600,
-          background: "#0369a1",
-          color: "white",
-          border: "none",
-          borderRadius: 4,
-          cursor: "pointer",
-          marginBottom: 16,
-        }}
-      >
-        Рассчитать
-      </button>
+
 
       {error && (
         <div style={{ background: "#fef2f2", border: "1px solid #fecaca", padding: 8, marginBottom: 16, color: "#991b1b" }}>
