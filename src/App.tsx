@@ -1,7 +1,8 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { runCalculation, computeMu } from "./calc/engine";
 import { useBuilding, type Building } from "./building/context";
-import { SyncedNumField } from "./building/SyncedField";
+import { SyncedNumField, SyncedSelectField } from "./building/SyncedField";
+import { PricesBlock } from "./building/PricesBlock";
 import type {
   CalculationInput,
   CalculationOutput,
@@ -102,6 +103,7 @@ const DEFAULT_INPUT: CalculationInput = {
 
 export function ColumnApp() {
   const { building, setBuilding } = useBuilding();
+  const initialRoof = lookupStructure(building.roofStructure);
   const [input, setInput] = useState<CalculationInput>(() => ({
     ...DEFAULT_INPUT,
     span_m: building.span_m,
@@ -111,15 +113,26 @@ export function ColumnApp() {
     framePitch_m: building.framePitch_m,
     w0_kPa: building.w0_kPa,
     Sg_kPa: building.Sg_kPa,
+    terrainType: building.terrainType,
+    roofStructure: building.roofStructure,
+    roofLoad_kPa: initialRoof?.kPa ?? DEFAULT_INPUT.roofLoad_kPa,
+    responsibilityCoeff: building.responsibilityCoeff,
+    prices: {
+      "С255Б": building.priceC255B_rubKg,
+      "С355Б": building.priceC355B_rubKg,
+      "С245": building.priceC245_rubKg,
+      "С345": building.priceC345_rubKg,
+    },
   }));
   const [results, setResults] = useState<Results | null>(null);
   const [activeTab, setActiveTab] = useState<ColumnType>("edge");
   const [error, setError] = useState<string | null>(null);
-  const [cityQuery, setCityQuery] = useState("");
-  const [selectedCity, setSelectedCity] = useState("");
+  const [cityQuery, setCityQuery] = useState(building.city);
+  const [showCityMatches, setShowCityMatches] = useState(false);
 
   // Pull updates from BuildingContext when other tabs change shared fields.
   useEffect(() => {
+    const roof = lookupStructure(building.roofStructure);
     setInput((cur) => ({
       ...cur,
       span_m: building.span_m,
@@ -129,32 +142,40 @@ export function ColumnApp() {
       framePitch_m: building.framePitch_m,
       w0_kPa: building.w0_kPa,
       Sg_kPa: building.Sg_kPa,
+      terrainType: building.terrainType,
+      roofStructure: building.roofStructure,
+      roofLoad_kPa: roof ? roof.kPa : cur.roofLoad_kPa,
+      responsibilityCoeff: building.responsibilityCoeff,
+      prices: {
+        "С255Б": building.priceC255B_rubKg,
+        "С355Б": building.priceC355B_rubKg,
+        "С245": building.priceC245_rubKg,
+        "С345": building.priceC345_rubKg,
+      },
     }));
+    setCityQuery(building.city);
   }, [building]);
 
-  const updSynced = <K extends keyof Building>(key: K, value: number) => {
+  const updSynced = <K extends keyof Building>(key: K, value: Building[K]) => {
     setBuilding({ [key]: value } as Partial<Building>);
   };
 
   const cityMatches = useMemo(() => {
-    if (cityQuery.length < 2) return [];
+    if (!showCityMatches || cityQuery.length < 2) return [];
     return searchSettlements(cityQuery).slice(0, 10);
-  }, [cityQuery]);
+  }, [cityQuery, showCityMatches]);
 
   const handleCitySelect = useCallback(
     (id: string) => {
       const s = getSettlementClimateById(id);
       if (!s) return;
-      setSelectedCity(`${s.settlement} (${s.region})`);
-      setCityQuery("");
-      setInput((prev) => ({
-        ...prev,
-        terrainType: s.terrain.defaultType ?? prev.terrainType,
-      }));
-      const patch: Partial<Building> = {};
+      const label = `${s.settlement} (${s.region})`;
+      setShowCityMatches(false);
+      const patch: Partial<Building> = { city: label };
+      if (s.terrain.defaultType) patch.terrainType = s.terrain.defaultType as Building["terrainType"];
       if (typeof s.wind.w0Kpa === "number") patch.w0_kPa = s.wind.w0Kpa;
       if (typeof s.snow.sgKpa === "number") patch.Sg_kPa = s.snow.sgKpa;
-      if (Object.keys(patch).length > 0) setBuilding(patch);
+      setBuilding(patch);
     },
     [setBuilding],
   );
@@ -176,13 +197,6 @@ export function ColumnApp() {
   const upd = (patch: Partial<CalculationInput>) =>
     setInput((p) => ({ ...p, ...patch }));
 
-  const setRoofStructure = (id: string) => {
-    const s = lookupStructure(id);
-    upd({
-      roofStructure: id,
-      roofLoad_kPa: s ? s.kPa : input.roofLoad_kPa,
-    });
-  };
   const setWallStructure = (id: string) => {
     const s = lookupStructure(id);
     upd({
@@ -272,21 +286,32 @@ export function ColumnApp() {
         {/* Column 2: loads */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
           <legend style={{ fontWeight: 600 }}>Нагрузки</legend>
-          <div style={{ marginBottom: 8 }}>
-            <label style={{ fontSize: 13, display: "block" }}>Город (автозаполнение w₀, Sg)</label>
+          <div title="Синхронизировано со всеми вкладками" style={{ marginBottom: 6, background: "#fef9c3", border: "1px dashed #eab308", borderRadius: 4, padding: "4px 6px" }}>
+            <label style={{ fontSize: 13, display: "block" }}>
+              <span style={{ color: "#92400e", marginRight: 4 }}>🔗</span>
+              Город (автозаполнение w₀, Sg)
+            </label>
             <input
               style={{ width: "100%", padding: 4, boxSizing: "border-box" }}
               value={cityQuery}
-              onChange={(e) => setCityQuery(e.target.value)}
+              onChange={(e) => {
+                setCityQuery(e.target.value);
+                setShowCityMatches(true);
+              }}
+              onFocus={() => setShowCityMatches(true)}
+              onBlur={() => {
+                setBuilding({ city: cityQuery });
+                window.setTimeout(() => setShowCityMatches(false), 150);
+              }}
               placeholder="Введите название..."
             />
             {cityMatches.length > 0 && (
-              <div style={{ border: "1px solid #ddd", maxHeight: 200, overflow: "auto" }}>
+              <div style={{ border: "1px solid #ddd", maxHeight: 200, overflow: "auto", background: "white" }}>
                 {cityMatches.map((s) => (
                   <div
                     key={s.id}
                     style={{ padding: "4px 8px", cursor: "pointer", fontSize: 13 }}
-                    onClick={() => handleCitySelect(s.id)}
+                    onMouseDown={(e) => { e.preventDefault(); handleCitySelect(s.id); }}
                     onMouseOver={(e) => (e.currentTarget.style.background = "#eef")}
                     onMouseOut={(e) => (e.currentTarget.style.background = "")}
                   >
@@ -298,11 +323,8 @@ export function ColumnApp() {
                 ))}
               </div>
             )}
-            {selectedCity && (
-              <div style={{ fontSize: 12, color: "#080" }}>Выбран: {selectedCity}</div>
-            )}
           </div>
-          <SelectField
+          <SyncedSelectField
             label="Тип местности"
             value={input.terrainType}
             options={[
@@ -310,15 +332,15 @@ export function ColumnApp() {
               ["B", "B — город/лес"],
               ["C", "C — плотная застройка"],
             ]}
-            onChange={(v) => upd({ terrainType: v as TerrainType })}
+            onChange={(v) => updSynced("terrainType", v as Building["terrainType"])}
           />
           <SyncedNumField label="w₀ (ветер), кПа" value={input.w0_kPa} onChange={(v) => updSynced("w0_kPa", v)} step={0.01} />
           <SyncedNumField label="Sg (снег), кПа" value={input.Sg_kPa} onChange={(v) => updSynced("Sg_kPa", v)} step={0.01} />
-          <SelectField
+          <SyncedSelectField
             label="Конструкция покрытия"
             value={input.roofStructure}
             options={STRUCTURES.map((s) => [s.id, `${s.id} (${s.kPa.toFixed(3)} кПа)`])}
-            onChange={setRoofStructure}
+            onChange={(v) => updSynced("roofStructure", v)}
           />
           <Field label="Нагрузка от кровли, кПа" value={input.roofLoad_kPa} onChange={(v) => upd({ roofLoad_kPa: v })} step={0.001} />
           <SelectField
@@ -328,7 +350,7 @@ export function ColumnApp() {
             onChange={setWallStructure}
           />
           <Field label="Нагрузка от ограждения, кПа" value={input.wallLoad_kPa} onChange={(v) => upd({ wallLoad_kPa: v })} step={0.001} />
-          <Field label="Ур. ответственности γₙ" value={input.responsibilityCoeff} onChange={(v) => upd({ responsibilityCoeff: v })} step={0.05} />
+          <SyncedNumField label="Ур. ответственности γₙ" value={input.responsibilityCoeff} onChange={(v) => updSynced("responsibilityCoeff", v)} step={0.05} />
         </fieldset>
 
         {/* Column 3: column & economy */}
@@ -344,20 +366,12 @@ export function ColumnApp() {
             </div>
           </div>
           <Field label="Надбавка, %" value={input.loadAddition_pct} onChange={(v) => upd({ loadAddition_pct: v })} />
-          <hr style={{ margin: "8px 0" }} />
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Цены стали, руб/кг</div>
-          {(["С255Б", "С355Б", "С245", "С345"] as const).map((s) => (
-            <Field
-              key={s}
-              label={s}
-              value={input.prices[s]}
-              onChange={(v) =>
-                upd({ prices: { ...input.prices, [s]: v } })
-              }
-              step={0.1}
-            />
-          ))}
         </fieldset>
+      </div>
+
+      {/* Synced prices block (visible in every tab) */}
+      <div style={{ marginBottom: 16 }}>
+        <PricesBlock />
       </div>
 
       {/* Cranes row */}
@@ -785,6 +799,7 @@ function BuildingSummaryBanner() {
       }}
     >
       <span style={{ fontWeight: 600 }}>🔗 Здание (общее):</span>
+      {building.city && <span>город <b>{building.city}</b></span>}
       <span>пролёт <b>{building.span_m}</b> м</span>
       <span>длина <b>{building.length_m}</b> м</span>
       <span>высота <b>{building.height_m}</b> м</span>
@@ -792,6 +807,9 @@ function BuildingSummaryBanner() {
       <span>шаг рам <b>{building.framePitch_m}</b> м</span>
       <span>w₀ <b>{building.w0_kPa}</b> кПа</span>
       <span>Sg <b>{building.Sg_kPa}</b> кПа</span>
+      <span>местн. <b>{building.terrainType}</b></span>
+      <span>покр. <b>{building.roofStructure}</b></span>
+      <span>γₙ <b>{building.responsibilityCoeff}</b></span>
     </div>
   );
 }

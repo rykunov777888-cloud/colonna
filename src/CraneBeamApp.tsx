@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { PricesBlock } from "./building/PricesBlock";
 import {
   calculateCraneBeam,
   craneOptions,
@@ -142,6 +143,10 @@ export function CraneBeamApp() {
             {calculating ? "Расчёт..." : "Рассчитать"}
           </button>
         </fieldset>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <PricesBlock />
       </div>
 
       {error && (

@@ -1,7 +1,8 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { runPurlinCalculation, getCassetteHeightFilter } from "./calc/purlin/engine";
 import { useBuilding, type Building } from "./building/context";
-import { SyncedNumField } from "./building/SyncedField";
+import { SyncedNumField, SyncedSelectField } from "./building/SyncedField";
+import { PricesBlock } from "./building/PricesBlock";
 import type {
   PurlinInput,
   PurlinOutput,
@@ -10,7 +11,6 @@ import type {
   SnowDriftMode,
   RoofShape,
 } from "./calc/purlin/types";
-import type { TerrainType } from "./calc/types";
 import { searchSettlements, getSettlementClimateById } from "./types/climate";
 import structuresJson from "./data/structures/structures.json";
 
@@ -54,6 +54,7 @@ const GRADE_LABELS: Record<SteelGrade, string> = { MP350: "МП350", MP390: "М�
 
 export function PurlinApp() {
   const { building, setBuilding } = useBuilding();
+  const initialRoof = lookupStructure(building.roofStructure);
   const [input, setInput] = useState<PurlinInput>(() => ({
     ...DEFAULT_INPUT,
     span_m: building.span_m,
@@ -63,15 +64,21 @@ export function PurlinApp() {
     framePitch_m: building.framePitch_m,
     w0_kPa: building.w0_kPa,
     Sg_kPa: building.Sg_kPa,
+    terrainType: building.terrainType,
+    roofStructure: building.roofStructure,
+    roofLoad_kPa: initialRoof?.kPa ?? DEFAULT_INPUT.roofLoad_kPa,
+    gamma_n: building.responsibilityCoeff,
+    cassetteHeightFilter_mm: getCassetteHeightFilter(building.roofStructure),
   }));
   const [out, setOut] = useState<PurlinOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cityQuery, setCityQuery] = useState("");
-  const [selectedCity, setSelectedCity] = useState("");
+  const [cityQuery, setCityQuery] = useState(building.city);
+  const [showCityMatches, setShowCityMatches] = useState(false);
   const [maxUtilFixed, setMaxUtilFixed] = useState<boolean>(false);
   const [maxUtilValue, setMaxUtilValue] = useState<number>(0.85);
 
   useEffect(() => {
+    const roof = lookupStructure(building.roofStructure);
     setInput((cur) => ({
       ...cur,
       span_m: building.span_m,
@@ -81,31 +88,34 @@ export function PurlinApp() {
       framePitch_m: building.framePitch_m,
       w0_kPa: building.w0_kPa,
       Sg_kPa: building.Sg_kPa,
+      terrainType: building.terrainType,
+      roofStructure: building.roofStructure,
+      roofLoad_kPa: roof ? roof.kPa : cur.roofLoad_kPa,
+      cassetteHeightFilter_mm: getCassetteHeightFilter(building.roofStructure),
+      gamma_n: building.responsibilityCoeff,
     }));
+    setCityQuery(building.city);
   }, [building]);
 
-  const updSynced = <K extends keyof Building>(key: K, value: number) => {
+  const updSynced = <K extends keyof Building>(key: K, value: Building[K]) => {
     setBuilding({ [key]: value } as Partial<Building>);
   };
 
   const cityMatches = useMemo(() => {
-    if (cityQuery.length < 2) return [];
+    if (!showCityMatches || cityQuery.length < 2) return [];
     return searchSettlements(cityQuery).slice(0, 10);
-  }, [cityQuery]);
+  }, [cityQuery, showCityMatches]);
 
   const handleCitySelect = useCallback((id: string) => {
     const s = getSettlementClimateById(id);
     if (!s) return;
-    setSelectedCity(`${s.settlement} (${s.region})`);
-    setCityQuery("");
-    setInput((prev) => ({
-      ...prev,
-      terrainType: s.terrain.defaultType ?? prev.terrainType,
-    }));
-    const patch: Partial<Building> = {};
+    const label = `${s.settlement} (${s.region})`;
+    setShowCityMatches(false);
+    const patch: Partial<Building> = { city: label };
+    if (s.terrain.defaultType) patch.terrainType = s.terrain.defaultType as Building["terrainType"];
     if (typeof s.wind.w0Kpa === "number") patch.w0_kPa = s.wind.w0Kpa;
     if (typeof s.snow.sgKpa === "number") patch.Sg_kPa = s.snow.sgKpa;
-    if (Object.keys(patch).length > 0) setBuilding(patch);
+    setBuilding(patch);
   }, [setBuilding]);
 
   const handleCalc = () => {
@@ -124,15 +134,6 @@ export function PurlinApp() {
   };
 
   const upd = (patch: Partial<PurlinInput>) => setInput((p) => ({ ...p, ...patch }));
-
-  const setRoofStructure = (id: string) => {
-    const s = lookupStructure(id);
-    upd({
-      roofStructure: id,
-      roofLoad_kPa: s ? s.kPa : input.roofLoad_kPa,
-      cassetteHeightFilter_mm: getCassetteHeightFilter(id),
-    });
-  };
 
   return (
     <div>
@@ -159,10 +160,10 @@ export function PurlinApp() {
           <SyncedNumField label="Высота до низа фермы, м" value={input.height_m} onChange={(v) => updSynced("height_m", v)} />
           <SyncedNumField label="Уклон кровли, °" value={input.roofSlope_deg} onChange={(v) => updSynced("roofSlope_deg", v)} />
           <SyncedNumField label="Шаг рам / пролёт прогона, м" value={input.framePitch_m} onChange={(v) => updSynced("framePitch_m", v)} />
-          <Field
+          <SyncedNumField
             label="γₙ (коэф. ответственности)"
             value={input.gamma_n}
-            onChange={(v) => upd({ gamma_n: v })}
+            onChange={(v) => setBuilding({ responsibilityCoeff: v })}
             step={0.05}
           />
         </fieldset>
@@ -170,21 +171,32 @@ export function PurlinApp() {
         {/* Column 2: loads */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
           <legend style={{ fontWeight: 600 }}>Климат и нагрузки</legend>
-          <div style={{ marginBottom: 8 }}>
-            <label style={{ fontSize: 13, display: "block" }}>Город (автозаполнение w₀, Sg)</label>
+          <div title="Синхронизировано со всеми вкладками" style={{ marginBottom: 6, background: "#fef9c3", border: "1px dashed #eab308", borderRadius: 4, padding: "4px 6px" }}>
+            <label style={{ fontSize: 13, display: "block" }}>
+              <span style={{ color: "#92400e", marginRight: 4 }}>🔗</span>
+              Город (автозаполнение w₀, Sg)
+            </label>
             <input
               style={{ width: "100%", padding: 4, boxSizing: "border-box" }}
               value={cityQuery}
-              onChange={(e) => setCityQuery(e.target.value)}
+              onChange={(e) => {
+                setCityQuery(e.target.value);
+                setShowCityMatches(true);
+              }}
+              onFocus={() => setShowCityMatches(true)}
+              onBlur={() => {
+                setBuilding({ city: cityQuery });
+                window.setTimeout(() => setShowCityMatches(false), 150);
+              }}
               placeholder="Введите название..."
             />
             {cityMatches.length > 0 && (
-              <div style={{ border: "1px solid #ddd", maxHeight: 200, overflow: "auto" }}>
+              <div style={{ border: "1px solid #ddd", maxHeight: 200, overflow: "auto", background: "white" }}>
                 {cityMatches.map((s) => (
                   <div
                     key={s.id}
                     style={{ padding: "4px 8px", cursor: "pointer", fontSize: 13 }}
-                    onClick={() => handleCitySelect(s.id)}
+                    onMouseDown={(e) => { e.preventDefault(); handleCitySelect(s.id); }}
                     onMouseOver={(e) => (e.currentTarget.style.background = "#eef")}
                     onMouseOut={(e) => (e.currentTarget.style.background = "")}
                   >
@@ -196,9 +208,8 @@ export function PurlinApp() {
                 ))}
               </div>
             )}
-            {selectedCity && <div style={{ fontSize: 12, color: "#080" }}>Выбран: {selectedCity}</div>}
           </div>
-          <SelectField
+          <SyncedSelectField
             label="Тип местности"
             value={input.terrainType}
             options={[
@@ -206,15 +217,15 @@ export function PurlinApp() {
               ["B", "B — город/лес"],
               ["C", "C — плотная застройка"],
             ]}
-            onChange={(v) => upd({ terrainType: v as TerrainType })}
+            onChange={(v) => updSynced("terrainType", v as Building["terrainType"])}
           />
           <SyncedNumField label="w₀ (ветер), кПа" value={input.w0_kPa} onChange={(v) => updSynced("w0_kPa", v)} step={0.01} />
           <SyncedNumField label="Sg (снег), кПа" value={input.Sg_kPa} onChange={(v) => updSynced("Sg_kPa", v)} step={0.05} />
-          <SelectField
+          <SyncedSelectField
             label="Конструкция покрытия"
             value={input.roofStructure}
             options={STRUCTURES.map((s) => [s.id, `${s.id} (${s.kPa.toFixed(3)} кПа)`])}
-            onChange={setRoofStructure}
+            onChange={(v) => updSynced("roofStructure", v)}
           />
           <Field
             label="Нагрузка от кровли, кПа"
@@ -306,6 +317,10 @@ export function PurlinApp() {
             )}
           </div>
         </fieldset>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <PricesBlock />
       </div>
 
       <button

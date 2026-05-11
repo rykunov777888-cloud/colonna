@@ -1,7 +1,8 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { runTrussCalculation, getDefaultMinThickness } from "./calc/truss/engine";
 import { useBuilding, type Building } from "./building/context";
-import { SyncedNumField } from "./building/SyncedField";
+import { SyncedNumField, SyncedSelectField } from "./building/SyncedField";
+import { PricesBlock } from "./building/PricesBlock";
 import {
   TRUSS_SECTIONS,
   TRUSS_SECTION_LABELS,
@@ -10,7 +11,6 @@ import {
   type TrussOutput,
   type TrussSection,
 } from "./calc/truss/types";
-import type { TerrainType } from "./calc/types";
 import { searchSettlements, getSettlementClimateById } from "./types/climate";
 import structuresJson from "./data/structures/structures.json";
 
@@ -46,6 +46,7 @@ const DEFAULT_INPUT: TrussInput = {
 
 export function TrussApp() {
   const { building, setBuilding } = useBuilding();
+  const initialRoof = lookupStructure(building.roofStructure);
   const [input, setInput] = useState<TrussInput>(() => ({
     ...DEFAULT_INPUT,
     span_m: building.span_m,
@@ -55,14 +56,19 @@ export function TrussApp() {
     framePitch_m: building.framePitch_m,
     w0_kPa: building.w0_kPa,
     Sg_kPa: building.Sg_kPa,
+    terrainType: building.terrainType,
+    roofStructure: building.roofStructure,
+    roofLoad_kPa: initialRoof?.kPa ?? DEFAULT_INPUT.roofLoad_kPa,
+    responsibilityCoeff: building.responsibilityCoeff,
   }));
   const [out, setOut] = useState<TrussOutput | null>(null);
   const [activeSection, setActiveSection] = useState<TrussSection>("VP");
   const [error, setError] = useState<string | null>(null);
-  const [cityQuery, setCityQuery] = useState("");
-  const [selectedCity, setSelectedCity] = useState("");
+  const [cityQuery, setCityQuery] = useState(building.city);
+  const [showCityMatches, setShowCityMatches] = useState(false);
 
   useEffect(() => {
+    const roof = lookupStructure(building.roofStructure);
     setInput((cur) => ({
       ...cur,
       span_m: building.span_m,
@@ -72,31 +78,33 @@ export function TrussApp() {
       framePitch_m: building.framePitch_m,
       w0_kPa: building.w0_kPa,
       Sg_kPa: building.Sg_kPa,
+      terrainType: building.terrainType,
+      roofStructure: building.roofStructure,
+      roofLoad_kPa: roof ? roof.kPa : cur.roofLoad_kPa,
+      responsibilityCoeff: building.responsibilityCoeff,
     }));
+    setCityQuery(building.city);
   }, [building]);
 
-  const updSynced = <K extends keyof Building>(key: K, value: number) => {
+  const updSynced = <K extends keyof Building>(key: K, value: Building[K]) => {
     setBuilding({ [key]: value } as Partial<Building>);
   };
 
   const cityMatches = useMemo(() => {
-    if (cityQuery.length < 2) return [];
+    if (!showCityMatches || cityQuery.length < 2) return [];
     return searchSettlements(cityQuery).slice(0, 10);
-  }, [cityQuery]);
+  }, [cityQuery, showCityMatches]);
 
   const handleCitySelect = useCallback((id: string) => {
     const s = getSettlementClimateById(id);
     if (!s) return;
-    setSelectedCity(`${s.settlement} (${s.region})`);
-    setCityQuery("");
-    setInput((prev) => ({
-      ...prev,
-      terrainType: s.terrain.defaultType ?? prev.terrainType,
-    }));
-    const patch: Partial<Building> = {};
+    const label = `${s.settlement} (${s.region})`;
+    setShowCityMatches(false);
+    const patch: Partial<Building> = { city: label };
+    if (s.terrain.defaultType) patch.terrainType = s.terrain.defaultType as Building["terrainType"];
     if (typeof s.wind.w0Kpa === "number") patch.w0_kPa = s.wind.w0Kpa;
     if (typeof s.snow.sgKpa === "number") patch.Sg_kPa = s.snow.sgKpa;
-    if (Object.keys(patch).length > 0) setBuilding(patch);
+    setBuilding(patch);
   }, [setBuilding]);
 
   const handleCalc = () => {
@@ -112,11 +120,6 @@ export function TrussApp() {
 
   const upd = (patch: Partial<TrussInput>) =>
     setInput((p) => ({ ...p, ...patch }));
-
-  const setRoofStructure = (id: string) => {
-    const s = lookupStructure(id);
-    upd({ roofStructure: id, roofLoad_kPa: s ? s.kPa : input.roofLoad_kPa });
-  };
 
   const updMinThick = (sec: TrussSection, v: number) =>
     setInput((p) => ({ ...p, minThickness_mm: { ...p.minThickness_mm, [sec]: v } }));
@@ -147,10 +150,10 @@ export function TrussApp() {
             onChange={(v) => upd({ purlinPitch_mm: v })}
             step={100}
           />
-          <Field
+          <SyncedNumField
             label="γₙ (коэф. ответственности)"
             value={input.responsibilityCoeff}
-            onChange={(v) => upd({ responsibilityCoeff: v })}
+            onChange={(v) => updSynced("responsibilityCoeff", v)}
             step={0.05}
           />
         </fieldset>
@@ -158,21 +161,32 @@ export function TrussApp() {
         {/* Column 2: loads */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
           <legend style={{ fontWeight: 600 }}>Климат и нагрузки</legend>
-          <div style={{ marginBottom: 8 }}>
-            <label style={{ fontSize: 13, display: "block" }}>Город (автозаполнение w₀, Sg)</label>
+          <div title="Синхронизировано со всеми вкладками" style={{ marginBottom: 6, background: "#fef9c3", border: "1px dashed #eab308", borderRadius: 4, padding: "4px 6px" }}>
+            <label style={{ fontSize: 13, display: "block" }}>
+              <span style={{ color: "#92400e", marginRight: 4 }}>🔗</span>
+              Город (автозаполнение w₀, Sg)
+            </label>
             <input
               style={{ width: "100%", padding: 4, boxSizing: "border-box" }}
               value={cityQuery}
-              onChange={(e) => setCityQuery(e.target.value)}
+              onChange={(e) => {
+                setCityQuery(e.target.value);
+                setShowCityMatches(true);
+              }}
+              onFocus={() => setShowCityMatches(true)}
+              onBlur={() => {
+                setBuilding({ city: cityQuery });
+                window.setTimeout(() => setShowCityMatches(false), 150);
+              }}
               placeholder="Введите название..."
             />
             {cityMatches.length > 0 && (
-              <div style={{ border: "1px solid #ddd", maxHeight: 200, overflow: "auto" }}>
+              <div style={{ border: "1px solid #ddd", maxHeight: 200, overflow: "auto", background: "white" }}>
                 {cityMatches.map((s) => (
                   <div
                     key={s.id}
                     style={{ padding: "4px 8px", cursor: "pointer", fontSize: 13 }}
-                    onClick={() => handleCitySelect(s.id)}
+                    onMouseDown={(e) => { e.preventDefault(); handleCitySelect(s.id); }}
                     onMouseOver={(e) => (e.currentTarget.style.background = "#eef")}
                     onMouseOut={(e) => (e.currentTarget.style.background = "")}
                   >
@@ -184,9 +198,8 @@ export function TrussApp() {
                 ))}
               </div>
             )}
-            {selectedCity && <div style={{ fontSize: 12, color: "#080" }}>Выбран: {selectedCity}</div>}
           </div>
-          <SelectField
+          <SyncedSelectField
             label="Тип местности"
             value={input.terrainType}
             options={[
@@ -194,15 +207,15 @@ export function TrussApp() {
               ["B", "B — город/лес"],
               ["C", "C — плотная застройка"],
             ]}
-            onChange={(v) => upd({ terrainType: v as TerrainType })}
+            onChange={(v) => updSynced("terrainType", v as Building["terrainType"])}
           />
           <SyncedNumField label="w₀ (ветер), кПа" value={input.w0_kPa} onChange={(v) => updSynced("w0_kPa", v)} step={0.01} />
           <SyncedNumField label="Sg (снег), кПа" value={input.Sg_kPa} onChange={(v) => updSynced("Sg_kPa", v)} step={0.01} />
-          <SelectField
+          <SyncedSelectField
             label="Конструкция покрытия"
             value={input.roofStructure}
             options={STRUCTURES.map((s) => [s.id, `${s.id} (${s.kPa.toFixed(3)} кПа)`])}
-            onChange={setRoofStructure}
+            onChange={(v) => updSynced("roofStructure", v)}
           />
           <Field
             label="Нагрузка от кровли, кПа"
@@ -254,6 +267,10 @@ export function TrussApp() {
             <Field label="РР" value={input.minWidth_mm.RR} onChange={(v) => updMinWidth("RR", v)} step={10} />
           </div>
         </fieldset>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <PricesBlock />
       </div>
 
       <button

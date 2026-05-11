@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useBuilding, type Building } from "./building/context";
-import { SyncedNumField } from "./building/SyncedField";
+import { SyncedNumField, SyncedSelectField } from "./building/SyncedField";
+import { PricesBlock } from "./building/PricesBlock";
 import {
   calculateWindowRiegel,
   defaultWindowRiegelInputs,
@@ -39,6 +40,9 @@ export function WindowRiegelApp() {
     buildingHeightM: building.height_m,
     frameStepM: building.framePitch_m,
     windLoadKpa: building.w0_kPa,
+    city: building.city || defaultWindowRiegelInputs.city,
+    terrainType: building.terrainType,
+    responsibilityLevel: building.responsibilityCoeff,
   }));
 
   useEffect(() => {
@@ -49,10 +53,13 @@ export function WindowRiegelApp() {
       buildingHeightM: building.height_m,
       frameStepM: building.framePitch_m,
       windLoadKpa: building.w0_kPa,
+      city: building.city || cur.city,
+      terrainType: building.terrainType,
+      responsibilityLevel: building.responsibilityCoeff,
     }));
   }, [building]);
 
-  const updSynced = <K extends keyof Building>(key: K, value: number) => {
+  const updSynced = <K extends keyof Building>(key: K, value: Building[K]) => {
     setBuilding({ [key]: value } as Partial<Building>);
   };
 
@@ -70,9 +77,9 @@ export function WindowRiegelApp() {
   const setCity = (city: string) => {
     const climate = findClimateSettlement(city);
     setInputs((cur) => ({ ...cur, city }));
-    if (typeof climate?.w0Kpa === "number") {
-      setBuilding({ w0_kPa: climate.w0Kpa });
-    }
+    const patch: Partial<Building> = { city };
+    if (typeof climate?.w0Kpa === "number") patch.w0_kPa = climate.w0Kpa;
+    setBuilding(patch);
   };
 
   return (
@@ -82,8 +89,11 @@ export function WindowRiegelApp() {
         {/* Column 1: Geometry */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
           <legend style={{ fontWeight: 600 }}>Геометрия здания и окна</legend>
-          <div style={{ marginBottom: 6 }}>
-            <label style={{ fontSize: 13, display: "block" }}>Город (автозаполнение w₀)</label>
+          <div title="Синхронизировано со всеми вкладками" style={{ marginBottom: 6, background: "#fef9c3", border: "1px dashed #eab308", borderRadius: 4, padding: "4px 6px" }}>
+            <label style={{ fontSize: 13, display: "block" }}>
+              <span style={{ color: "#92400e", marginRight: 4 }}>🔗</span>
+              Город (автозаполнение w₀)
+            </label>
             <input
               list="window-riegel-cities"
               value={inputs.city}
@@ -114,18 +124,18 @@ export function WindowRiegelApp() {
         {/* Column 2: Wind & loads */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
           <legend style={{ fontWeight: 600 }}>Ветер и нагрузки</legend>
-          <SelField
+          <SyncedSelectField
             label="Тип местности"
             value={String(inputs.terrainType)}
             options={windowRiegelOptions.terrainTypes.map((t) => [String(t), String(t)])}
-            onChange={(v) => upd("terrainType", v)}
+            onChange={(v) => updSynced("terrainType", v as Building["terrainType"])}
           />
           <SyncedNumField label="Ветровая нагрузка w₀, кПа" value={inputs.windLoadKpa} step={0.01} onChange={(v) => updSynced("w0_kPa", v)} />
-          <SelField
-            label="Уровень ответственности"
+          <SyncedSelectField
+            label="Уровень ответственности γₙ"
             value={String(inputs.responsibilityLevel)}
             options={windowRiegelOptions.responsibilityLevels.map((r) => [String(r), String(r)])}
-            onChange={(v) => upd("responsibilityLevel", Number(v))}
+            onChange={(v) => updSynced("responsibilityCoeff", Number(v))}
           />
           <SelField
             label="Конструкция окна"
@@ -155,6 +165,10 @@ export function WindowRiegelApp() {
             ))}
           </div>
         </fieldset>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <PricesBlock />
       </div>
 
       <hr style={{ margin: "20px 0" }} />

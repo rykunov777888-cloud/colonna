@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 /**
@@ -6,14 +6,26 @@ import type { ReactNode } from "react";
  * Каждая вкладка может игнорировать любое поле — оно не обязано присутствовать
  * во всех расчётах.
  */
+export type TerrainType = "A" | "B" | "C";
+
 export interface Building {
-  span_m: number;          // Пролёт здания, м
-  length_m: number;        // Длина здания, м
-  height_m: number;        // Высота здания (до низа фермы), м
-  roofSlope_deg: number;   // Уклон кровли, °
-  framePitch_m: number;    // Шаг рам, м
-  w0_kPa: number;          // Нормативное ветровое давление w₀, кПа
-  Sg_kPa: number;          // Снеговая нагрузка Sg, кПа
+  span_m: number;            // Пролёт здания, м
+  length_m: number;          // Длина здания, м
+  height_m: number;          // Высота здания (до низа фермы), м
+  roofSlope_deg: number;     // Уклон кровли, °
+  framePitch_m: number;      // Шаг рам, м
+  w0_kPa: number;            // Нормативное ветровое давление w₀, кПа
+  Sg_kPa: number;            // Снеговая нагрузка Sg, кПа
+  terrainType: TerrainType;  // Тип местности по СП 20
+  roofStructure: string;     // Конструкция покрытия (id из structures.json)
+  city: string;              // Выбранный город/поселение (текст в поле ввода)
+  responsibilityCoeff: number; // γₙ — коэф. ответственности
+  priceC255B_rubKg: number;  // Цена С255Б, руб/кг
+  priceC355B_rubKg: number;  // Цена С355Б, руб/кг
+  priceC245_rubKg: number;   // Цена С245 (двутавр), руб/кг
+  priceC345_rubKg: number;   // Цена С345 (двутавр), руб/кг
+  priceMP350_rubKg: number;  // Цена ЛСТК МП350, руб/кг
+  priceMP390_rubKg: number;  // Цена ЛСТК МП390, руб/кг
 }
 
 const DEFAULT_BUILDING: Building = {
@@ -24,6 +36,16 @@ const DEFAULT_BUILDING: Building = {
   framePitch_m: 6,
   w0_kPa: 0.38,
   Sg_kPa: 2.45,
+  terrainType: "B",
+  roofStructure: "профлист",
+  city: "",
+  responsibilityCoeff: 1,
+  priceC255B_rubKg: 148.8,
+  priceC355B_rubKg: 155.88,
+  priceC245_rubKg: 130.2,
+  priceC345_rubKg: 141,
+  priceMP350_rubKg: 180,
+  priceMP390_rubKg: 180,
 };
 
 const STORAGE_KEY = "colonna:building:v1";
@@ -74,44 +96,4 @@ export function useBuilding(): BuildingContextValue {
   return ctx;
 }
 
-/**
- * Хук для двусторонней синхронизации поля локального стейта с контекстом здания.
- *
- * При монтировании и при каждом изменении building[key] обновляет локальный стейт
- * через onLocalChange(newValue). При изменении локального значения через возвращаемый
- * setSynced — обновляет контекст.
- *
- * Используется в калькуляторах, у которых уже есть `setInput()` для всего объекта.
- */
-export function useBuildingSync<K extends keyof Building>(
-  key: K,
-  localValue: number,
-  onLocalChange: (v: number) => void,
-) {
-  const { building, setBuilding } = useBuilding();
-  const lastFromContext = useRef<number>(building[key]);
 
-  useEffect(() => {
-    if (building[key] !== lastFromContext.current) {
-      lastFromContext.current = building[key];
-      if (building[key] !== localValue) {
-        onLocalChange(building[key]);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [building[key]]);
-
-  // On initial mount — push context value into local state
-  useEffect(() => {
-    if (building[key] !== localValue) {
-      onLocalChange(building[key]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (v: number) => {
-    onLocalChange(v);
-    setBuilding({ [key]: v } as Partial<Building>);
-    lastFromContext.current = v;
-  };
-}

@@ -2,10 +2,10 @@ import { useMemo, useState, useEffect } from "react";
 import { calculate, defaultInputs } from "./calc/beamCell/engine";
 import { useBuilding, type Building } from "./building/context";
 import { SyncedNumField } from "./building/SyncedField";
+import { PricesBlock } from "./building/PricesBlock";
 import type {
   CalculatorInputs,
   MemberSolution,
-  Prices,
   Steel,
 } from "./calc/beamCell/types";
 
@@ -38,6 +38,11 @@ export function BeamCellApp() {
     floorType: "балка покрытия",
     mainBeamSpan: building.span_m,
     mainBeamStep: building.framePitch_m,
+    prices: {
+      ...defaultInputs.prices,
+      ibeamC245: building.priceC245_rubKg,
+      ibeamC345: building.priceC345_rubKg,
+    },
   }));
 
   useEffect(() => {
@@ -45,8 +50,13 @@ export function BeamCellApp() {
       ...cur,
       mainBeamSpan: building.span_m,
       mainBeamStep: building.framePitch_m,
+      prices: {
+        ...cur.prices,
+        ibeamC245: building.priceC245_rubKg,
+        ibeamC345: building.priceC345_rubKg,
+      },
     }));
-  }, [building.span_m, building.framePitch_m]);
+  }, [building.span_m, building.framePitch_m, building.priceC245_rubKg, building.priceC345_rubKg]);
 
   const updSynced = <K extends keyof Building>(key: K, value: number) => {
     setBuilding({ [key]: value } as Partial<Building>);
@@ -55,8 +65,6 @@ export function BeamCellApp() {
   const result = useMemo(() => calculate(inputs), [inputs]);
   const upd = <K extends keyof CalculatorInputs>(k: K, v: CalculatorInputs[K]) =>
     setInputs((cur) => ({ ...cur, [k]: v }));
-  const updPrice = (k: keyof Prices, v: number) =>
-    setInputs((cur) => ({ ...cur, prices: { ...cur.prices, [k]: v } }));
 
   return (
     <div>
@@ -93,20 +101,23 @@ export function BeamCellApp() {
           </div>
         </fieldset>
 
-        {/* Column 3: Steel & price */}
+        {/* Column 3: Steel */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
-          <legend style={{ fontWeight: 600 }}>Сталь и цены</legend>
+          <legend style={{ fontWeight: 600 }}>Сталь</legend>
           <SelField
             label="Сталь ГБ (для итога ★)"
             value={inputs.acceptedMainSteel}
             options={STEELS.map((s) => [s, s])}
             onChange={(v) => upd("acceptedMainSteel", v as Steel)}
           />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
-            <NumField label="Двутавр С245, ₽/кг" value={inputs.prices.ibeamC245} step={0.5} onChange={(v) => updPrice("ibeamC245", v)} />
-            <NumField label="Двутавр С345, ₽/кг" value={inputs.prices.ibeamC345} step={0.5} onChange={(v) => updPrice("ibeamC345", v)} />
+          <div style={{ fontSize: 12, color: "#666", marginTop: 8 }}>
+            Цены С245/С345 — в общем блоке «Цены стали» ниже (синхронизированы между всеми вкладками).
           </div>
         </fieldset>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <PricesBlock />
       </div>
 
       <hr style={{ margin: "20px 0" }} />

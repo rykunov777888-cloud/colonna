@@ -80,3 +80,38 @@ export function SyncedNumField({
     </div>
   );
 }
+
+/** Inline synced select field (label + select together). */
+export function SyncedSelectField({
+  label,
+  value,
+  options,
+  onChange,
+  hint = "Синхронизировано со всеми вкладками",
+}: {
+  label: string;
+  value: string;
+  options: [string, string][];
+  onChange: (v: string) => void;
+  hint?: string;
+}) {
+  return (
+    <div title={hint} style={SYNCED_FIELD_STYLE}>
+      <label style={{ fontSize: 13, display: "block" }}>
+        <span style={{ color: "#92400e", marginRight: 4 }}>{SYNCED_BADGE}</span>
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: "100%", padding: 4, boxSizing: "border-box" }}
+      >
+        {options.map(([v, l]) => (
+          <option key={v} value={v}>
+            {l}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
