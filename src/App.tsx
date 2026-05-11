@@ -5,12 +5,12 @@ import { useBuildingResults, type ColumnResultByType, type ResultItem } from "./
 import { useRoofTotalLoad_kPa } from "./building/loadPropagation";
 import { SyncedNumField, SyncedSelectField } from "./building/SyncedField";
 import { PricesBlock } from "./building/PricesBlock";
+import { Collapsible } from "./building/Collapsible";
 import type {
   CalculationInput,
   CalculationOutput,
   ColumnType,
   CraneCapacity,
-  RoofType,
   SpanCount,
   TerrainType,
 } from "./calc/types";
@@ -205,6 +205,7 @@ export function ColumnApp() {
       Sg_kPa: building.Sg_kPa,
       terrainType: building.terrainType,
       roofStructure: building.roofStructure,
+      roofType: building.roofShape === "gable" ? "gable" : "single_slope",
       roofLoad_kPa: roofLoad.total_kPa > 0 ? roofLoad.total_kPa : cur.roofLoad_kPa,
       responsibilityCoeff: building.responsibilityCoeff,
       prices: {
@@ -295,6 +296,8 @@ export function ColumnApp() {
         Подбор профиля по СП 16.13330 / СП 20.13330. 208 профилей × 4 марки стали × 0–4 распорки.
       </p>
 
+      <div style={{ marginBottom: 16 }}>
+       <Collapsible title="📥 Исходные данные" storageKey="column-inputs" defaultOpen={true}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
         {/* Column 1: building geometry */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
@@ -314,14 +317,14 @@ export function ColumnApp() {
             ]}
             onChange={(v) => upd({ spanCount: v as SpanCount })}
           />
-          <SelectField
+          <SyncedSelectField
             label="Кровля"
-            value={input.roofType}
+            value={building.roofShape}
             options={[
               ["gable", "Двускатная"],
-              ["single_slope", "Односкатная"],
+              ["monoslope", "Односкатная"],
             ]}
-            onChange={(v) => upd({ roofType: v as RoofType })}
+            onChange={(v) => updSynced("roofShape", v as Building["roofShape"])}
           />
           <CheckField
             label="Связи по периметру"
@@ -504,6 +507,8 @@ export function ColumnApp() {
             </>
           )}
         </fieldset>
+      </div>
+       </Collapsible>
       </div>
 
       {/* Auto-propagation info banner */}

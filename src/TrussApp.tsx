@@ -5,6 +5,7 @@ import { useBuildingResults, type TrussResult } from "./building/results";
 import { useRoofTotalLoad_kPa } from "./building/loadPropagation";
 import { SyncedNumField, SyncedSelectField } from "./building/SyncedField";
 import { PricesBlock } from "./building/PricesBlock";
+import { Collapsible } from "./building/Collapsible";
 import {
   TRUSS_SECTIONS,
   TRUSS_SECTION_LABELS,
@@ -173,6 +174,8 @@ export function TrussApp() {
         Подбор сечений 5 элементов фермы (ВП, НП, ОРб, ОР, РР) по СП 16.13330. Каталог 579 трубных профилей с исключением нестандартных толщин.
       </p>
 
+      <div style={{ marginBottom: 16 }}>
+       <Collapsible title="📥 Исходные данные" storageKey="truss-inputs" defaultOpen={true}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
         {/* Column 1: geometry */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
@@ -314,6 +317,8 @@ export function TrussApp() {
             <Field label="РР" value={input.minWidth_mm.RR} onChange={(v) => updMinWidth("RR", v)} step={10} />
           </div>
         </fieldset>
+      </div>
+       </Collapsible>
       </div>
 
       <div style={{ marginBottom: 16 }}>

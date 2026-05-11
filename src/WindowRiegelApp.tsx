@@ -3,6 +3,7 @@ import { useBuilding, type Building } from "./building/context";
 import { useBuildingResults, type ResultItem } from "./building/results";
 import { SyncedNumField, SyncedSelectField } from "./building/SyncedField";
 import { PricesBlock } from "./building/PricesBlock";
+import { Collapsible } from "./building/Collapsible";
 import {
   calculateWindowRiegel,
   defaultWindowRiegelInputs,
@@ -107,6 +108,8 @@ export function WindowRiegelApp() {
   return (
     <div>
       <h2 style={{ marginTop: 0 }}>Оконные ригели</h2>
+      <div style={{ marginBottom: 16 }}>
+       <Collapsible title="📥 Исходные данные" storageKey="windowriegel-inputs" defaultOpen={true}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         {/* Column 1: Geometry */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
@@ -187,6 +190,8 @@ export function WindowRiegelApp() {
             ))}
           </div>
         </fieldset>
+      </div>
+       </Collapsible>
       </div>
 
       <div style={{ marginTop: 16 }}>

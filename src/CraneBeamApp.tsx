@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { PricesBlock } from "./building/PricesBlock";
+import { Collapsible } from "./building/Collapsible";
 import { useBuildingResults, type ResultItem } from "./building/results";
 import {
   calculateCraneBeam,
@@ -86,6 +87,8 @@ export function CraneBeamApp() {
         устойчивости / усталости (7К–8К) / прогибов. Расчёт занимает ~3–10 секунд.
       </p>
 
+      <div style={{ marginBottom: 16 }}>
+       <Collapsible title="📥 Исходные данные" storageKey="cranebeam-inputs" defaultOpen={true}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         {/* Column 1: Crane */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
@@ -193,6 +196,8 @@ export function CraneBeamApp() {
             Авто-пересчёт <span style={{ color: "#94a3b8" }}>(медленно)</span>
           </label>
         </fieldset>
+      </div>
+       </Collapsible>
       </div>
 
       <div style={{ marginTop: 12 }}>

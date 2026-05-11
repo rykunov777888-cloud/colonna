@@ -4,6 +4,7 @@ import { useBuilding, type Building } from "./building/context";
 import { useBuildingResults, type ResultItem } from "./building/results";
 import { SyncedNumField, SyncedSelectField } from "./building/SyncedField";
 import { PricesBlock } from "./building/PricesBlock";
+import { Collapsible } from "./building/Collapsible";
 import {
   selectRolledTop10,
   type RolledCandidate,
@@ -15,7 +16,6 @@ import type {
   SteelGrade,
   LstkProfileType,
   SnowDriftMode,
-  RoofShape,
 } from "./calc/purlin/types";
 import { searchSettlements, getSettlementClimateById } from "./types/climate";
 import structuresJson from "./data/structures/structures.json";
@@ -106,6 +106,7 @@ export function PurlinApp() {
       Sg_kPa: building.Sg_kPa,
       terrainType: building.terrainType,
       roofStructure: building.roofStructure,
+      roofShape: building.roofShape,
       roofLoad_kPa: roof ? roof.kPa : cur.roofLoad_kPa,
       cassetteHeightFilter_mm: getCassetteHeightFilter(building.roofStructure),
       gamma_n: building.responsibilityCoeff,
@@ -198,18 +199,20 @@ export function PurlinApp() {
         Два каталога рядом: ЛСТК (2ТПС/2ПС/Z, МП350/МП390) и прокатные трубы (кв./пр., С245/С345). Шаг прокатных прогонов фиксирован 1500&nbsp;мм.
       </p>
 
+      <div style={{ marginBottom: 16 }}>
+       <Collapsible title="📥 Исходные данные" storageKey="purlin-inputs" defaultOpen={true}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
         {/* Column 1: geometry */}
         <fieldset style={{ border: "1px solid #ccc", padding: 12, borderRadius: 6 }}>
           <legend style={{ fontWeight: 600 }}>Геометрия здания</legend>
-          <SelectField
+          <SyncedSelectField
             label="Тип кровли"
-            value={input.roofShape}
+            value={building.roofShape}
             options={[
               ["gable", "двускатная"],
               ["monoslope", "односкатная"],
             ]}
-            onChange={(v) => upd({ roofShape: v as RoofShape })}
+            onChange={(v) => updSynced("roofShape", v as Building["roofShape"])}
           />
           <SyncedNumField label="Пролёт, м" value={input.span_m} onChange={(v) => updSynced("span_m", v)} />
           <SyncedNumField label="Длина здания, м" value={input.length_m} onChange={(v) => updSynced("length_m", v)} />
@@ -373,6 +376,8 @@ export function PurlinApp() {
             )}
           </div>
         </fieldset>
+      </div>
+       </Collapsible>
       </div>
 
       <div style={{ marginBottom: 16 }}>

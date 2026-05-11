@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
  * во всех расчётах.
  */
 export type TerrainType = "A" | "B" | "C";
+export type RoofShape = "gable" | "monoslope"; // Двускатная / Односкатная
 
 export interface Building {
   span_m: number;            // Пролёт здания, м
@@ -18,6 +19,7 @@ export interface Building {
   Sg_kPa: number;            // Снеговая нагрузка Sg, кПа
   terrainType: TerrainType;  // Тип местности по СП 20
   roofStructure: string;     // Конструкция покрытия (id из structures.json)
+  roofShape: RoofShape;      // Тип кровли (gable=двускатная / monoslope=односкатная)
   city: string;              // Выбранный город/поселение (текст в поле ввода)
   responsibilityCoeff: number; // γₙ — коэф. ответственности
   priceC255B_rubKg: number;  // Цена С255Б, руб/кг
@@ -38,6 +40,7 @@ const DEFAULT_BUILDING: Building = {
   Sg_kPa: 2.45,
   terrainType: "B",
   roofStructure: "профлист",
+  roofShape: "gable",
   city: "",
   responsibilityCoeff: 1,
   priceC255B_rubKg: 148.8,
